@@ -53,8 +53,12 @@ pgproof drill "$DATABASE_URL"
 # keep the (verified) dump — this is your backup now
 pgproof drill "$DATABASE_URL" --keep --out backups/today.dump
 
-# verify an EXISTING backup file against the live database's manifest
-pgproof drill "$DATABASE_URL" --file backups/2026-08-01.dump
+# verify a RECENT backup file against the live database's manifest
+pgproof drill "$DATABASE_URL" --file backups/today.dump
+
+# verify an OLD ARCHIVE with no live source (or one that changed since):
+# restores it, validates constraints, runs probes, reports what it contains
+pgproof verify backups/2026-07-01.dump --probe "SELECT count(*) > 0 FROM clients"
 
 # domain probes: prove the data is not just present but sane
 pgproof drill "$DATABASE_URL" \

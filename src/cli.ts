@@ -72,4 +72,46 @@ program
     }
   });
 
+program
+  .command("verify")
+  .description("verify an ARCHIVED dump with no live source: restore it into a throwaway cluster, validate constraints, run probes, report what it contains")
+  .argument("<file>", "pg_dump custom-format archive (.dump)")
+  .option("--probe <sql...>", "sanity queries run on the restored copy; pass = first column of first row is truthy")
+  .option("--json", "machine-readable output")
+  .action(async (file: string, opts: { probe?: string[]; json?: boolean }) => {
+    const { runFileVerify } = await import("./verifyfile.js");
+    const workdir = mkdtempSync(join(tmpdir(), "pgproof-"));
+    try {
+      const r = await runFileVerify({ file: resolve(file), workdir, probes: opts.probe ?? [] });
+      if (opts.json) {
+        console.log(JSON.stringify(r, null, 2));
+      } else {
+        const rows = r.manifest.tables.reduce((a, t) => a + t.rows, 0);
+        const head = r.ok ? "✓ ARCHIVE VERIFIED" : "✗ ARCHIVE FAILED";
+        console.log("");
+        console.log(`${head} — ${resolve(file)}`);
+        console.log("─".repeat(60));
+        if (r.info.dbname) console.log(`  dumped from   ${r.info.dbname}${r.info.createdAt ? " · " + r.info.createdAt : ""}`);
+        if (r.info.dumpedByMajor) console.log(`  dump tool     pg_dump v${r.info.dumpedByMajor}`);
+        console.log(`  tools         v${r.binaries.major} · ${r.binaries.dir}`);
+        console.log(`  contains      ${r.manifest.tables.length} tables · ${rows.toLocaleString("en-US")} rows`);
+        console.log(`  rls policies  ${r.manifest.rlsPolicies}`);
+        console.log(`  extensions    ${r.manifest.extensions.join(", ") || "none"}`);
+        console.log(`  sha256        ${r.sha256}`);
+        console.log(`  timings       restore ${r.durations.restoreMs} ms · verify ${r.durations.verifyMs} ms`);
+        if (!r.ok) {
+          console.log("");
+          for (const p of r.problems) console.log(`  ✗ ${p}`);
+        }
+        console.log("");
+      }
+      process.exitCode = r.ok ? 0 : 1;
+    } catch (e) {
+      console.error(`pgproof: ${e instanceof Error ? e.message : e}`);
+      process.exitCode = 2;
+    } finally {
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  });
+
 program.parseAsync();
