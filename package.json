@@ -1,0 +1,48 @@
+{
+  "name": "pgproof",
+  "version": "0.1.0",
+  "description": "Postgres backups that prove they restore \u2014 dump, restore into a disposable cluster, verify.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "pgproof": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "e2e": "node --import tsx test/e2e.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pgfabric/pgproof"
+  },
+  "homepage": "https://pgproof.com",
+  "keywords": [
+    "postgres",
+    "postgresql",
+    "backup",
+    "restore",
+    "pg_dump",
+    "verification",
+    "supabase",
+    "neon"
+  ],
+  "dependencies": {
+    "commander": "^14.0.3",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}

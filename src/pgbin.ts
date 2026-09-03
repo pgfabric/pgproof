@@ -1,0 +1,71 @@
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+
+export interface BinaryDir {
+  major: number;
+  dir: string;
+}
+
+export interface BinaryPick extends BinaryDir {
+  exact: boolean;
+}
+
+/** "15.1", "17.2 (Homebrew)", "9.6.24" → major int */
+export function majorFromVersionString(v: string): number {
+  const m = v.trim().match(/^(\d+)/);
+  if (!m) throw new Error(`unparseable Postgres version: "${v}"`);
+  return parseInt(m[1], 10);
+}
+
+/**
+ * Client tools must be >= the dump's major. Prefer exact; else the smallest
+ * newer major; older-only is unusable.
+ */
+export function pickBinaryDir(wantedMajor: number, available: BinaryDir[]): BinaryPick | null {
+  const exact = available.find((b) => b.major === wantedMajor);
+  if (exact) return { ...exact, exact: true };
+  const newer = available
+    .filter((b) => b.major > wantedMajor)
+    .sort((a, b) => a.major - b.major)[0];
+  return newer ? { ...newer, exact: false } : null;
+}
+
+/** Discover local Postgres binary directories (PATH, Postgres.app, PGPROOF_PG_BIN). */
+export function discoverBinaryDirs(): BinaryDir[] {
+  const found = new Map<string, BinaryDir>();
+
+  const probe = (dir: string) => {
+    const pgctl = join(dir, "pg_ctl");
+    if (!existsSync(pgctl) || !existsSync(join(dir, "pg_dump"))) return;
+    try {
+      const out = execFileSync(join(dir, "pg_dump"), ["--version"], { encoding: "utf8" });
+      const m = out.match(/(\d+)(?:\.\d+)?/);
+      if (m) found.set(dir, { major: parseInt(m[1], 10), dir });
+    } catch {
+      /* unusable dir */
+    }
+  };
+
+  if (process.env.PGPROOF_PG_BIN) probe(process.env.PGPROOF_PG_BIN);
+
+  const pgAppVersions = "/Applications/Postgres.app/Contents/Versions";
+  if (existsSync(pgAppVersions)) {
+    for (const entry of readdirSync(pgAppVersions)) {
+      if (entry === "latest") continue;
+      probe(join(pgAppVersions, entry, "bin"));
+    }
+  }
+
+  for (const dir of (process.env.PATH ?? "").split(":")) {
+    if (dir) probe(dir);
+  }
+
+  // Debian/Ubuntu layout
+  const pgdg = "/usr/lib/postgresql";
+  if (existsSync(pgdg)) {
+    for (const entry of readdirSync(pgdg)) probe(join(pgdg, entry, "bin"));
+  }
+
+  return [...found.values()].sort((a, b) => a.major - b.major);
+}
