@@ -6,6 +6,28 @@ import { createServer } from "node:net";
 
 const run = promisify(execFile);
 
+/**
+ * Env for spawned Postgres tools. When the environment defines no locale at
+ * all, default LC_ALL/LANG to "C": on macOS, postmaster 13-17 aborts with
+ * "postmaster became multithreaded during startup" in a locale-less
+ * environment (CoreFoundation fallback spawns a thread); slim containers can
+ * hit the same class of failure. Explicit user locales are left untouched.
+ */
+function toolEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const hasLocale = Object.keys(env).some((k) => k === "LANG" || k.startsWith("LC_"));
+  if (!hasLocale) {
+    env["LC_ALL"] = "C";
+    env["LANG"] = "C";
+  }
+  return env;
+}
+
+async function runTool(cmd: string, args: string[]): Promise<{ stdout: string }> {
+  return run(cmd, args, { env: toolEnv() });
+}
+
+
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = createServer();
@@ -40,10 +62,10 @@ export class TempCluster {
   static async create(opts: TempClusterOptions): Promise<TempCluster> {
     const dataDir = mkdtempSync(join(opts.dataRoot, "cluster-"));
     const port = await freePort();
-    await run(join(opts.binDir, "initdb"), [
+    await runTool(join(opts.binDir, "initdb"), [
       "-D", dataDir, "-U", "pgproof", "--auth=trust", "-E", "UTF8", "--no-locale",
     ]);
-    await run(join(opts.binDir, "pg_ctl"), [
+    await runTool(join(opts.binDir, "pg_ctl"), [
       "-D", dataDir, "-w", "-t", "30",
       // Unix sockets disabled: every connection is TCP on 127.0.0.1, and macOS
       // caps socket paths at ~104 chars, which breaks deeply nested dataRoots.
@@ -59,7 +81,7 @@ export class TempCluster {
   }
 
   async createDb(name: string): Promise<void> {
-    await run(join(this.binDir, "createdb"), ["-h", "127.0.0.1", "-p", String(this.port), "-U", this.user, name]);
+    await runTool(join(this.binDir, "createdb"), ["-h", "127.0.0.1", "-p", String(this.port), "-U", this.user, name]);
   }
 
   async psql(db: string, sql: string): Promise<string> {
@@ -72,7 +94,7 @@ export class TempCluster {
 
   async destroy(): Promise<void> {
     try {
-      await run(join(this.binDir, "pg_ctl"), ["-D", this.dataDir, "-m", "immediate", "-w", "stop"]);
+      await runTool(join(this.binDir, "pg_ctl"), ["-D", this.dataDir, "-m", "immediate", "-w", "stop"]);
     } catch {
       /* already stopped */
     }
