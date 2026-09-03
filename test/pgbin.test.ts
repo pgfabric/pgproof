@@ -35,3 +35,11 @@ test("returns null when only older majors exist (cannot restore newer dumps)", (
   const dirs = [{ major: 13, dir: "/v/13/bin" }];
   assert.equal(pickBinaryDir(15, dirs), null);
 });
+
+test("default probe roots include Homebrew keg-only and EDB locations", async () => {
+  const { defaultProbeRoots } = await import("../src/pgbin.js");
+  const roots = defaultProbeRoots();
+  assert.ok(roots.some((r) => r.startsWith("/opt/homebrew/opt")), "homebrew arm64");
+  assert.ok(roots.some((r) => r.startsWith("/usr/local/opt")), "homebrew intel");
+  assert.ok(roots.some((r) => r.startsWith("/Library/PostgreSQL")), "EDB installer");
+});

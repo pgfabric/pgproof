@@ -39,10 +39,13 @@ export async function runDrill(opts: DrillOptions): Promise<DrillResult> {
   const bins = discoverBinaryDirs();
   const pick = pickBinaryDir(sourceMajor, bins);
   if (!pick) {
+    const { defaultProbeRoots } = await import("./pgbin.js");
     throw new Error(
-      `no local Postgres binaries >= ${sourceMajor} found ` +
-      `(available: ${bins.map((b) => b.major).join(", ") || "none"}). ` +
-      `Install matching tools or set PGPROOF_PG_BIN.`,
+      `your database runs Postgres ${sourceMajor}, but no local tools >= ${sourceMajor} were found ` +
+      `(found majors: ${bins.map((b) => b.major).join(", ") || "none"}).\n` +
+      `Searched PATH and: ${defaultProbeRoots().join(", ")}.\n` +
+      `Fix: install matching tools (e.g. "brew install postgresql@${sourceMajor}" or Postgres.app ${sourceMajor}), ` +
+      `or point PGPROOF_PG_BIN at a bin directory that has pg_dump ${sourceMajor}+.`,
     );
   }
 

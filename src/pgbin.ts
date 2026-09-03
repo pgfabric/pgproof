@@ -31,7 +31,22 @@ export function pickBinaryDir(wantedMajor: number, available: BinaryDir[]): Bina
   return newer ? { ...newer, exact: false } : null;
 }
 
-/** Discover local Postgres binary directories (PATH, Postgres.app, PGPROOF_PG_BIN). */
+/**
+ * Directory-glob roots probed for versioned Postgres installs, beyond PATH:
+ * Postgres.app, Homebrew keg-only (postgresql@N is NOT on PATH), EDB
+ * installers, Debian/Ubuntu PGDG.
+ */
+export function defaultProbeRoots(): string[] {
+  return [
+    "/Applications/Postgres.app/Contents/Versions",
+    "/opt/homebrew/opt", // Homebrew Apple Silicon: postgresql@17/bin
+    "/usr/local/opt", // Homebrew Intel
+    "/Library/PostgreSQL", // EDB installer: <major>/bin
+    "/usr/lib/postgresql", // Debian/Ubuntu PGDG: <major>/bin
+  ];
+}
+
+/** Discover local Postgres binary directories (PATH, roots above, PGPROOF_PG_BIN). */
 export function discoverBinaryDirs(): BinaryDir[] {
   const found = new Map<string, BinaryDir>();
 
@@ -49,22 +64,18 @@ export function discoverBinaryDirs(): BinaryDir[] {
 
   if (process.env.PGPROOF_PG_BIN) probe(process.env.PGPROOF_PG_BIN);
 
-  const pgAppVersions = "/Applications/Postgres.app/Contents/Versions";
-  if (existsSync(pgAppVersions)) {
-    for (const entry of readdirSync(pgAppVersions)) {
+  for (const root of defaultProbeRoots()) {
+    if (!existsSync(root)) continue;
+    for (const entry of readdirSync(root)) {
       if (entry === "latest") continue;
-      probe(join(pgAppVersions, entry, "bin"));
+      // Homebrew: only postgresql@N entries are Postgres; others (openssl…) are cheap to skip.
+      if (root.endsWith("/opt") && !entry.startsWith("postgresql")) continue;
+      probe(join(root, entry, "bin"));
     }
   }
 
   for (const dir of (process.env.PATH ?? "").split(":")) {
     if (dir) probe(dir);
-  }
-
-  // Debian/Ubuntu layout
-  const pgdg = "/usr/lib/postgresql";
-  if (existsSync(pgdg)) {
-    for (const entry of readdirSync(pgdg)) probe(join(pgdg, entry, "bin"));
   }
 
   return [...found.values()].sort((a, b) => a.major - b.major);
