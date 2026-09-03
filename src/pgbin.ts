@@ -36,9 +36,30 @@ export function pickBinaryDir(wantedMajor: number, available: BinaryDir[]): Bina
  * Postgres.app, Homebrew keg-only (postgresql@N is NOT on PATH), EDB
  * installers, Debian/Ubuntu PGDG.
  */
+/** "Postgres.app", "Postgres 2.app", "Postgres copie.app" — duplicated app bundles. */
+export function isPostgresAppBundle(name: string): boolean {
+  return /^Postgres( .+)?\.app$/.test(name);
+}
+
+/** Versions dirs of every Postgres.app bundle (copies included) in app folders. */
+function postgresAppVersionRoots(): string[] {
+  const roots: string[] = [];
+  for (const apps of ["/Applications", join(process.env.HOME ?? "", "Applications")]) {
+    if (!existsSync(apps)) continue;
+    try {
+      for (const entry of readdirSync(apps)) {
+        if (isPostgresAppBundle(entry)) roots.push(join(apps, entry, "Contents/Versions"));
+      }
+    } catch {
+      /* unreadable */
+    }
+  }
+  return roots;
+}
+
 export function defaultProbeRoots(): string[] {
   return [
-    "/Applications/Postgres.app/Contents/Versions",
+    ...postgresAppVersionRoots(),
     "/opt/homebrew/opt", // Homebrew Apple Silicon: postgresql@17/bin
     "/usr/local/opt", // Homebrew Intel
     "/Library/PostgreSQL", // EDB installer: <major>/bin

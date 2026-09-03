@@ -53,3 +53,12 @@ test("envBinDiagnostic explains an unusable PGPROOF_PG_BIN explicitly", async ()
   assert.equal(envBinDiagnostic("/v/15/bin", found), null);
   assert.equal(envBinDiagnostic(undefined, found), null);
 });
+
+test("isPostgresAppBundle matches renamed copies like 'Postgres 2.app'", async () => {
+  const { isPostgresAppBundle } = await import("../src/pgbin.js");
+  assert.equal(isPostgresAppBundle("Postgres.app"), true);
+  assert.equal(isPostgresAppBundle("Postgres 2.app"), true);
+  assert.equal(isPostgresAppBundle("Postgres copie.app"), true);
+  assert.equal(isPostgresAppBundle("PostgresOutil.app"), false);
+  assert.equal(isPostgresAppBundle("Postman.app"), false);
+});
