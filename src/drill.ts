@@ -39,8 +39,10 @@ export async function runDrill(opts: DrillOptions): Promise<DrillResult> {
   const bins = discoverBinaryDirs();
   const pick = pickBinaryDir(sourceMajor, bins);
   if (!pick) {
-    const { defaultProbeRoots } = await import("./pgbin.js");
+    const { defaultProbeRoots, envBinDiagnostic } = await import("./pgbin.js");
+    const envNote = envBinDiagnostic(process.env.PGPROOF_PG_BIN, bins);
     throw new Error(
+      (envNote ? envNote + "\n" : "") +
       `your database runs Postgres ${sourceMajor}, but no local tools >= ${sourceMajor} were found ` +
       `(found majors: ${bins.map((b) => b.major).join(", ") || "none"}).\n` +
       `Searched PATH and: ${defaultProbeRoots().join(", ")}.\n` +

@@ -46,6 +46,20 @@ export function defaultProbeRoots(): string[] {
   ];
 }
 
+/**
+ * When PGPROOF_PG_BIN is set but yielded no usable tools, say so explicitly —
+ * a user-provided path must never be ignored silently. Returns null when the
+ * env is unset or its directory was successfully discovered.
+ */
+export function envBinDiagnostic(envDir: string | undefined, found: BinaryDir[]): string | null {
+  if (!envDir) return null;
+  if (found.some((b) => b.dir === envDir)) return null;
+  return (
+    `PGPROOF_PG_BIN=${envDir} was set, but no usable pg_dump/pg_ctl was found there ` +
+    `(directory missing, or binaries absent/not executable) — it was ignored.`
+  );
+}
+
 /** Discover local Postgres binary directories (PATH, roots above, PGPROOF_PG_BIN). */
 export function discoverBinaryDirs(): BinaryDir[] {
   const found = new Map<string, BinaryDir>();

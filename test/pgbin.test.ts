@@ -43,3 +43,13 @@ test("default probe roots include Homebrew keg-only and EDB locations", async ()
   assert.ok(roots.some((r) => r.startsWith("/usr/local/opt")), "homebrew intel");
   assert.ok(roots.some((r) => r.startsWith("/Library/PostgreSQL")), "EDB installer");
 });
+
+test("envBinDiagnostic explains an unusable PGPROOF_PG_BIN explicitly", async () => {
+  const { envBinDiagnostic } = await import("../src/pgbin.js");
+  const found = [{ major: 15, dir: "/v/15/bin" }];
+  const msg = envBinDiagnostic("/does/not/exist/bin", found);
+  assert.ok(msg && msg.includes("/does/not/exist/bin"));
+  assert.ok(msg && msg.toLowerCase().includes("pg_dump"));
+  assert.equal(envBinDiagnostic("/v/15/bin", found), null);
+  assert.equal(envBinDiagnostic(undefined, found), null);
+});
