@@ -45,7 +45,9 @@ export class TempCluster {
     ]);
     await run(join(opts.binDir, "pg_ctl"), [
       "-D", dataDir, "-w", "-t", "30",
-      "-o", `-p ${port} -c listen_addresses=127.0.0.1 -c unix_socket_directories='${dataDir}'`,
+      // Unix sockets disabled: every connection is TCP on 127.0.0.1, and macOS
+      // caps socket paths at ~104 chars, which breaks deeply nested dataRoots.
+      "-o", `-p ${port} -c listen_addresses=127.0.0.1 -c unix_socket_directories=''`,
       "-l", join(dataDir, "server.log"),
       "start",
     ]);
