@@ -2,7 +2,11 @@ import pg from "pg";
 import type { Manifest, TableCount } from "./manifest.js";
 
 /** Capture the verification manifest from a live database. Exact counts. */
-export async function captureManifest(url: string): Promise<Manifest> {
+export interface ManifestExclusions { extensions: string[]; schemas: string[] }
+
+export async function captureManifest(url: string, exclude?: ManifestExclusions): Promise<Manifest> {
+  const exSchemas = exclude?.schemas ?? [];
+  const exExts = exclude?.extensions ?? [];
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
@@ -16,8 +20,9 @@ export async function captureManifest(url: string): Promise<Manifest> {
       WHERE c.relkind IN ('r','p')
         AND n.nspname NOT IN ('pg_catalog','information_schema')
         AND n.nspname NOT LIKE 'pg_toast%'
+        AND NOT (n.nspname = ANY($1))
       ORDER BY 1, 2
-    `);
+    `, [exSchemas]);
 
     const tables: TableCount[] = [];
     for (const row of tablesRes.rows) {
@@ -26,7 +31,10 @@ export async function captureManifest(url: string): Promise<Manifest> {
       tables.push({ schema: row.schema, name: row.name, rows: Number(c.rows[0].n) });
     }
 
-    const ext = await client.query("SELECT extname FROM pg_extension ORDER BY 1");
+    const ext = await client.query(
+      "SELECT extname FROM pg_extension WHERE NOT (extname = ANY($1)) ORDER BY 1",
+      [exExts],
+    );
     const pol = await client.query("SELECT count(*)::int AS n FROM pg_policies");
     const seq = await client.query(
       "SELECT count(*)::int AS n FROM pg_class WHERE relkind = 'S'",

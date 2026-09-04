@@ -62,3 +62,17 @@ test("isPostgresAppBundle matches renamed copies like 'Postgres 2.app'", async (
   assert.equal(isPostgresAppBundle("PostgresOutil.app"), false);
   assert.equal(isPostgresAppBundle("Postman.app"), false);
 });
+
+test("buildDumpArgs excludes known unrestorable extensions when tools support it", async () => {
+  const { buildDumpArgs } = await import("../src/drill.js");
+  const args17 = buildDumpArgs(17, "/tmp/f.dump", "postgresql://u@h/db");
+  assert.ok(args17.includes("--exclude-extension=supabase_vault"));
+  const args13 = buildDumpArgs(13, "/tmp/f.dump", "postgresql://u@h/db");
+  assert.ok(!args13.some((a) => a.startsWith("--exclude-extension")), "pg_dump 13 lacks the flag");
+});
+
+test("captureManifest exclusions are reflected in the manifest contract", async () => {
+  const { UNRESTORABLE } = await import("../src/drill.js");
+  assert.ok(UNRESTORABLE.extensions.includes("supabase_vault"));
+  assert.ok(UNRESTORABLE.schemas.includes("vault"));
+});

@@ -60,3 +60,10 @@ test("extra table in restore target is reported (drill target must start empty)"
   assert.equal(r.ok, false);
   assert.ok(r.problems.some((p) => p.includes("stowaway") && p.includes("unexpected")));
 });
+
+test("only constraints that were valid at the source are flagged when unvalidated after restore", async () => {
+  const { newlyInvalidConstraints } = await import("../src/manifest.js");
+  assert.deepEqual(newlyInvalidConstraints(["a_not_valid_by_design"], ["a_not_valid_by_design"]), []);
+  assert.deepEqual(newlyInvalidConstraints([], ["fk_orders_client"]), ["fk_orders_client"]);
+  assert.deepEqual(newlyInvalidConstraints(["x"], ["x", "y"]), ["y"]);
+});

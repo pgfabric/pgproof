@@ -60,3 +60,13 @@ export function compareManifests(expected: Manifest, actual: Manifest): CompareR
 
   return { ok: problems.length === 0, problems };
 }
+
+/**
+ * Constraints left unvalidated after restore, EXCLUDING those that were
+ * already NOT VALID at the source (faithfully reproduced ≠ broken; some
+ * platforms create never-validated constraints by design).
+ */
+export function newlyInvalidConstraints(sourceInvalid: string[], restoredInvalid: string[]): string[] {
+  const known = new Set(sourceInvalid);
+  return restoredInvalid.filter((c) => !known.has(c));
+}

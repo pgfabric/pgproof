@@ -4,11 +4,32 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { captureManifest, invalidConstraints, runProbe } from "./connect.js";
-import { compareManifests, type Manifest } from "./manifest.js";
+import { compareManifests, newlyInvalidConstraints, type Manifest } from "./manifest.js";
 import { discoverBinaryDirs, majorFromVersionString, pickBinaryDir } from "./pgbin.js";
 import { TempCluster } from "./localcluster.js";
 
 const run = promisify(execFile);
+
+/**
+ * Platform-internal objects that exist ONLY on their managed platform and can
+ * never restore elsewhere. Excluded from dumps AND from the manifest so the
+ * proof compares what a restore can actually contain. Supabase Vault data is
+ * server-side encrypted anyway: it would be undecipherable in any dump.
+ */
+export const UNRESTORABLE = {
+  extensions: ["supabase_vault"],
+  schemas: ["vault"],
+};
+
+/** pg_dump args; --exclude-extension exists since pg_dump 14. */
+export function buildDumpArgs(toolMajor: number, file: string, url: string): string[] {
+  const args = ["-Fc", "--no-owner", "-f", file];
+  if (toolMajor >= 14) {
+    for (const e of UNRESTORABLE.extensions) args.push(`--exclude-extension=${e}`);
+  }
+  args.push(url);
+  return args;
+}
 
 export interface DrillOptions {
   url: string;
@@ -34,7 +55,8 @@ export async function runDrill(opts: DrillOptions): Promise<DrillResult> {
   const durations = { dumpMs: 0, restoreMs: 0, verifyMs: 0 };
 
   // 0. Manifest of the source, and binary selection matched to its version.
-  const manifest = await captureManifest(opts.url);
+  const manifest = await captureManifest(opts.url, UNRESTORABLE);
+  const sourceInvalid = await invalidConstraints(opts.url);
   const sourceMajor = majorFromVersionString(manifest.serverVersion);
   const bins = discoverBinaryDirs();
   const pick = pickBinaryDir(sourceMajor, bins);
@@ -56,7 +78,7 @@ export async function runDrill(opts: DrillOptions): Promise<DrillResult> {
   if (!dumpFile) {
     dumpFile = join(opts.workdir, `pgproof-${Date.now()}.dump`);
     const t0 = Date.now();
-    await run(join(pick.dir, "pg_dump"), ["-Fc", "--no-owner", "-f", dumpFile, opts.url]);
+    await run(join(pick.dir, "pg_dump"), buildDumpArgs(pick.major, dumpFile, opts.url));
     durations.dumpMs = Date.now() - t0;
   }
 
@@ -84,12 +106,13 @@ export async function runDrill(opts: DrillOptions): Promise<DrillResult> {
     // 4. Verify, only meaningful if restore did not hard-fail.
     const t2 = Date.now();
     if (problems.length === 0) {
-      const restored = await captureManifest(drillUrl);
+      const restored = await captureManifest(drillUrl, UNRESTORABLE);
       const cmp = compareManifests(manifest, restored);
       problems.push(...cmp.problems);
 
-      const invalid = await invalidConstraints(drillUrl);
-      for (const c of invalid) problems.push(`constraint ${c} is not validated after restore`);
+      const restoredInvalid = await invalidConstraints(drillUrl);
+      for (const c of newlyInvalidConstraints(sourceInvalid, restoredInvalid))
+        problems.push(`constraint ${c} is not validated after restore`);
 
       for (const probe of opts.probes) {
         try {
