@@ -21,10 +21,10 @@ export const UNRESTORABLE = {
   schemas: ["vault"],
 };
 
-/** pg_dump args; --exclude-extension exists since pg_dump 14. */
+/** pg_dump args; --exclude-extension was introduced in pg_dump 17. */
 export function buildDumpArgs(toolMajor: number, file: string, url: string): string[] {
   const args = ["-Fc", "--no-owner", "-f", file];
-  if (toolMajor >= 14) {
+  if (toolMajor >= 17) {
     for (const e of UNRESTORABLE.extensions) args.push(`--exclude-extension=${e}`);
   }
   args.push(url);
